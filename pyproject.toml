@@ -1,0 +1,15 @@
+[project]
+name = "apoll_copt"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "coptpy>=7.2.11",
+    "matplotlib>=3.10.6",
+    "numpy>=2.3.3",
+    "pyscipopt>=5.6.0",
+    "scipy>=1.16.2",
+    "torch>=2.8.0",
+    "torch-geometric>=2.6.1",
+]
