@@ -1,6 +1,6 @@
 # APOLLO-MILP for COPT
 
-This repository contains COPT version of APOLLO-MILP, which relies the following repositories:
+This repository contains COPT version of APOLLO-MILP, which relies on the following repositories:
 
 - [APOLLO](https://github.com/MIRALab-USTC/Apollo-MILP) for `Apollo.py`, where we replace Gurobi with COPT.
 - [Predict-and-Search_MILP_method](https://github.com/sribdcn/Predict-and-Search_MILP_method) for `GCN.py`, `trainPredictModel.py`, `helper.py` and `copt.py`, which is also used in [APOLLO](https://github.com/MIRALab-USTC/Apollo-MILP) and we replace Gurobi with COPT.
@@ -72,3 +72,21 @@ python Apollo.py -p problem -g gpu_id
 ```
 
 where `problem` can be `ca` or `sc`, and `gpu_id` is the GPU ID to use. There are other arguments that you can find in the code. The results will be saved in the `logs` folder where each instance has a separate sub-folder. The sub-folder contains solver log and reduced problem in each iteration and the log for the last iteration is the final result.
+
+## Experiment Results
+
+We run Apollo+COPT and COPT on `CA` and `SC` test instances for 1000 seconds per instance, and compare the average of `Best solution` and `Best gap` over all test instances. The results are shown in the following tables.
+
+### CA Instances (maximization, solution the higher the better)
+
+| Method       | Best Solution | Best Gap (%) |
+|--------------|----------------|--------------|
+| COPT         |  96112.93     |  6.9837     |
+| Apollo+COPT  |  95198.39     |  5.6210     |
+
+### SC Instances (minimization, solution the lower the better)
+
+| Method       | Best Solution | Best Gap (%) |
+|--------------|----------------|--------------|
+| COPT         |  125.32     |  17.1371     |
+| Apollo+COPT  |  125.68     |  18.2304     |
