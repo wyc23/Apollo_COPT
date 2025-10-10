@@ -75,18 +75,22 @@ where `problem` can be `ca` or `sc`, and `gpu_id` is the GPU ID to use. There ar
 
 ## Experiment Results
 
-We run Apollo+COPT and COPT on `CA` and `SC` test instances for 1000 seconds per instance, and compare the average of `Best solution` and `Best gap` over all test instances. The results are shown in the following tables.
+We run Apollo+COPT and COPT on `CA` and `SC` test instances for 1000 seconds per instance, and compare the average of `Best solution` over all test instances. The results are shown in the following tables.
 
-### CA Instances (maximization, solution the higher the better)
+| Method                  | CA $\uparrow$ | SC $\downarrow$ |
+|-------------------------|---------------|-----------------|
+| COPT                    |  **96112.93** |  **125.32**     |
+| Apollo+COPT             |  95198.39     |  125.68         |
+| Apollo+COPT with inital |  95548.33     |  125.74         |
 
-| Method       | Best Solution | Best Gap (%) |
-|--------------|----------------|--------------|
-| COPT         |  96112.93     |  6.9837     |
-| Apollo+COPT  |  95198.39     |  5.6210     |
+We follow the guidance from the paper and paper's repo, but the results are not as good, we provide some analysis as follows:
 
-### SC Instances (minimization, solution the lower the better)
+- Need hyperparameter tuning
+    - training: `LEARNING_RATE`, `NB_EPOCHS`, `BATCH_SIZE`, `WEIGHT_NORM`.
+    - inference: $k_0$, $k_1$, $\Delta$, `ITERATION_TIME`.
+- Need more advance GNN network
+    - currently we use 2 layer GNN from PS based on the paper repo
+- Need more training data
+    - in the paper, the author claims using 240 instances for training, which may not be enough.
 
-| Method       | Best Solution | Best Gap (%) |
-|--------------|----------------|--------------|
-| COPT         |  125.32     |  17.1371     |
-| Apollo+COPT  |  125.68     |  18.2304     |
+
