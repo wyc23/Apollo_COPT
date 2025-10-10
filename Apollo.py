@@ -144,6 +144,7 @@ def prediction_correction_copt():
     time_list = []
     node_list = []
     time_limit = [100, 100, 200, 600]
+    # time_limit = [400, 600]
     best_obj_list = []
     import time
 
@@ -220,6 +221,188 @@ def prediction_correction_copt():
             t = time.time() - t
 
             mvars = m.getVars()
+
+            scores.sort(key=lambda x: x[2], reverse=False)
+
+            counting = 0
+            fix_count = 0
+            for i in range(len(scores)):
+                if scores[i][3] != 0:
+                    continue
+
+                if fixing_status[scores[i][1]] == 1 and scores[i][3] == 0:
+                    var = m.getVarByName(scores[i][1])
+                    if scores[i][3] == m_ps.getVarByName(scores[i][1]).x:
+                        fixing_status[scores[i][1]] = 0
+                        var.setInfo(COPT.Info.LB, m_ps.getVarByName(scores[i][1]).x)
+                        var.setInfo(COPT.Info.UB, m_ps.getVarByName(scores[i][1]).x)
+                        fix_count += 1
+                    else:
+                        fixing_status[scores[i][1]] = 2
+                counting += 1
+
+                if counting >= k_0:
+                    break
+            print(f'inspect {counting} vars and fix {fix_count} to be 0')
+
+            counting = 0
+            fix_count = 0
+            scores.sort(key=lambda x: x[2], reverse=True)
+            for i in range(len(scores)):
+                if scores[i][3] != 1:
+                    continue
+
+                # for the vars prefixed to be 0
+                if fixing_status[scores[i][1]] == 1 and scores[i][3] == 1:
+                    var = m.getVarByName(scores[i][1])
+                    if scores[i][3] == m_ps.getVarByName(scores[i][1]).x:
+                        fixing_status[scores[i][1]] = 0
+                        var.setInfo(COPT.Info.LB, m_ps.getVarByName(scores[i][1]).x)
+                        var.setInfo(COPT.Info.UB, m_ps.getVarByName(scores[i][1]).x)
+                        fix_count += 1
+                    else:
+                        fixing_status[scores[i][1]] = 2
+                counting += 1
+
+                if counting >= k_1:
+                    break
+            print(f'inspect {counting} vars and fix {fix_count} to be 1')
+
+            m.write(f'{log_folder}/{test_ins_name}/{step}.lp')
+            ins_name_read = f'{log_folder}/{test_ins_name}/{step}.lp'
+
+            if args.problem == 'is' or args.problem == 'ca':
+                if m_ps.objval > best_obj:
+                    best_obj = m_ps.objval
+            else:
+                if m_ps.objval < best_obj:
+                    best_obj = m_ps.objval
+
+            st = f' {m_ps.objval} {t} {m_ps.getAttr(COPT.Attr.PoolSols)}\n'
+            log_file.write(st.encode())
+            log_file.flush()
+
+            obj_list.append(m_ps.objval)
+            time_list.append(t)
+            node_list.append(m_ps.getAttr(COPT.Attr.PoolSols))
+
+        best_obj_list.append(best_obj)
+
+
+def prediction_correction_copt_v2():
+    #set log folder
+    time = datetime.datetime.now()
+    solver='COPT'
+    test_task = f'{TaskName}_{solver}_Predect&Search'
+    if not os.path.isdir(f'./logs'):
+        os.mkdir(f'./logs')
+    if not os.path.isdir(f'./logs/{TaskName}'):
+        os.mkdir(f'./logs/{TaskName}')
+    if not os.path.isdir(f'./logs/{TaskName}/{test_task}_{time}'):
+        os.mkdir(f'./logs/{TaskName}/{test_task}_{time}')
+    log_folder=f'./logs/{TaskName}/{test_task}_{time}'
+
+    from GCN import GNNPolicy
+    pathstr = f'pretrain/{args.problem}_train/model_best.pth'
+    policy = GNNPolicy().to(DEVICE)
+    state = torch.load(pathstr, map_location=DEVICE)
+    policy.load_state_dict(state)
+
+    print(f"Load model from {pathstr}")
+
+    log_file = open(f'{log_folder}/test.log', 'wb')
+
+    obj_list = []
+    time_list = []
+    node_list = []
+    time_limit = [100, 100, 200, 600]
+    # time_limit = [400, 600]
+    best_obj_list = []
+    import time
+
+    sample_names = sorted(os.listdir(f'./data/instances/{TaskName}/test'))
+    for ins_num in range(min(len(sample_names),TestNum)):
+        test_ins_name = sample_names[ins_num]
+        ins_name_read = f'./data/instances/{TaskName}/test/{test_ins_name}'
+        os.makedirs(f'{log_folder}/{test_ins_name}', exist_ok=True)
+        if args.problem == 'is' or args.problem == 'ca':
+            best_obj = 0
+        else:
+            best_obj = 1000000
+
+        t = time.time()
+        fixing_status = {} # 2 unfix; 0 fixed; 1 prefix with inequality; -1 not need to fix
+
+        for step in range(len(time_limit)):
+            A, v_map, v_nodes, c_nodes, b_vars, \
+                constraint_features, variable_features, edge_indices, edge_features = get_graph_representation(ins_name_read)
+            
+            #! prediction
+            BD = policy(
+                constraint_features.to(DEVICE),
+                edge_indices.to(DEVICE),
+                edge_features.to(DEVICE),
+                variable_features.to(DEVICE),
+            ).sigmoid().cpu().squeeze()
+
+            k_0,k_1,delta = test_hyperparam(TaskName, step)
+
+            scores, fixing_status = variable_alignment(v_map, b_vars, BD, fixing_status)
+
+            scores, fixing_status = fix_variable(scores, fixing_status, k_0,k_1,delta, test_ins_name)
+
+            #! read instance
+            envconfig = cp.EnvrConfig()
+            envconfig.set('nobanner', '1')
+
+            env = cp.Envr()
+            m = env.createModel()
+            m.read(ins_name_read)
+            m_ps = m.clone()
+
+            m_ps.setParam(COPT.Param.TimeLimit, time_limit[step])
+            m_ps.setParam(COPT.Param.Threads, 1)
+            m_ps.setLogFile(f'{log_folder}/{test_ins_name}/{step}.log')
+
+            #! trust region method implemented by adding constraints
+            instance_variabels = m_ps.getVars().getAll()
+            instance_variabels.sort(key=lambda v: v.getName())
+            variabels_map = {}
+
+            for v in instance_variabels:  # get a dict (variable map), varname:var clasee
+                variabels_map[v.getName()] = v
+
+            alphas = []
+
+            for i in range(len(scores)):
+                tar_var = variabels_map[scores[i][1]]  # target variable <-- variable map
+                x_star = scores[i][3]  # 1,0,-1, decide whether need to fix
+                if x_star < 0 or fixing_status[scores[i][1]] != 2:
+                    continue
+
+                tmp_var = m_ps.addVar(name=f'alp_{tar_var.getName()}', vtype=COPT.CONTINUOUS)
+                alphas.append(tmp_var)
+                m_ps.addConstr(tmp_var >= tar_var - x_star, name=f'alpha_up_{i}')
+                m_ps.addConstr(tmp_var >= x_star - tar_var, name=f'alpha_dowm_{i}')
+
+            all_tmp = 0
+            for tmp in alphas:
+                all_tmp += tmp
+            m_ps.addConstr(all_tmp <= delta, name="sum_alpha")
+
+            # Check if there is initial solution (.mst)
+
+            sol_path = f'{log_folder}/{test_ins_name}/{step-1}.sol'
+            if os.path.exists(sol_path):
+                print(f'Reading initial solution from {sol_path}')
+                m_ps.readSol(sol_path)
+
+            m_ps.solve()
+            t = time.time() - t
+
+            mvars = m.getVars()
+
+            m_ps.writeSol(f'{log_folder}/{test_ins_name}/{step}.sol')
 
             scores.sort(key=lambda x: x[2], reverse=False)
 
@@ -489,7 +672,7 @@ print(f"use device {DEVICE}")
 
 TestNum=100
 
-prediction_correction_copt()
+prediction_correction_copt_v2()
 
 
 
